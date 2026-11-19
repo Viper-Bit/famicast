@@ -7,11 +7,12 @@ recompiles one (through `-DROMS`, see the [root README](../README.md#recompiling
 ## Status
 - **CPU**: the SM83 interpreter passes SingleStepTests sm83 (every opcode,
   cycle by cycle); recompiled code is the same C per instruction.
-- **System**: 129 blargg and mooneye test ROMs pass (cpu_instrs,
+- **System**: 132 blargg and mooneye test ROMs pass (cpu_instrs,
   instr_timing, mem_timing, halt_bug, dmg_sound, cgb_sound, mooneye's
-  timer, interrupt, DMA and MBC tests); 20 are listed open in
-  `tests/gb/test_roms.py`: 9 check another model's boot state, 8 PPU
-  timing, 3 more (below).
+  timer, interrupt, serial, DMA and MBC tests, MBC1 multicart); 17 are
+  listed open in `tests/gb/test_roms.py`: 9 check another model's boot
+  state, 8 PPU timing. The Color's speed switch is checked by AGE's
+  spsw-div and gambatte's start_stop ROMs.
 - **Picture**: dmg-acid2 and cgb-acid2 match their reference screenshots
   pixel for pixel.
 - **Games**: in samples of the licensed sets, 41 Game Boy and 36 Game Boy
@@ -29,7 +30,8 @@ recompiles one (through `-DROMS`, see the [root README](../README.md#recompiling
 ## Models and cartridges
 A game whose header asks for the Color runs in CGB mode, any other as on
 the original Game Boy (`gb_headless --model dmg|cgb` forces one).
-Cartridges: ROM only, MBC1 (not the multicart wiring), MBC2, MBC3 with its
+Cartridges: ROM only, MBC1 (also the multicart wiring: an 8 Mbit ROM with the logo again at
+$40104), MBC2, MBC3 with its
 clock, MBC5 (rumble ignored). Battery RAM is kept in `ROM.sav` next to the
 ROM; for MBC3 the clock is saved with it and moves on by the time the
 program was closed.
@@ -57,10 +59,10 @@ report on the serial port or in cartridge RAM print `result: passed`.
 - DMG games are not run in the Color's compatibility mode (its colours).
 - A line is drawn when its mode 3 starts: register writes in the middle of
   a line show on the next one (cgb-acid-hell needs that).
-- Open test ROMs: 8 mooneye PPU timing tests, one timer test (an
-  interrupt a loop late), the serial clock's phase at boot, MBC1 multicart
-  wiring. The CGB boot DIV value is unchecked; the speed switch takes no
-  time.
+- Open test ROMs: 8 mooneye PPU timing tests and the boot state of other
+  models. The CGB boot DIV value is unchecked; AGE's other speed switch
+  ROMs (tima, mode0, ch2 length, stop prefetch) still fail: the TIMA, PPU
+  and prefetch details after the switch are not modelled.
 
 ## Docs
 | File | Content |

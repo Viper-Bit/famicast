@@ -14,6 +14,7 @@ typedef struct {
     uint8_t ram[0x20000];       /* external RAM (MBC2: 512 half-bytes) */
     uint32_t ram_size;
     uint8_t type, mbc, battery, has_rtc;
+    uint8_t multicart;          /* MBC1M: bank bits 4-5 sit one place lower (shift 4, not 5) */
     char title[17];
     /* banking */
     uint8_t ram_on, mode;       /* RAM (and clock) enabled; MBC1 banking mode */

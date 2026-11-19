@@ -36,6 +36,8 @@ int gb_cart_load(GbCart *c, const uint8_t *d, size_t size, char *err, size_t err
     static const uint8_t WITH_RAM[] = {0x02, 0x03, 0x08, 0x09, 0x10, 0x12, 0x13, 0x1A, 0x1B, 0x1D, 0x1E};
     if (!c->ram_size && memchr(WITH_RAM, type, sizeof WITH_RAM)) c->ram_size = 0x2000;
     c->rom_bank = 1;
+    /* MBC1 multicart: 8 Mbit, and bank $10 (at $40000) has a header with the logo too */
+    c->multicart = c->mbc == MBC_1 && rom == 0x100000 && !memcmp(d + 0x104, d + 0x40104, 0x30);
     memcpy(c->title, d + 0x134, 16);
     for (int i = 0; i < 16; i++)
         if ((unsigned char)c->title[i] < 0x20 || (unsigned char)c->title[i] > 0x7E) c->title[i] = 0;
@@ -52,8 +54,9 @@ static uint32_t rom_bank(const GbCart *c, int high) {
     uint32_t b;
     switch (c->mbc) {
     case MBC_1: {  /* a 0 in the 5-bit register reads as 1; mode 1 also banks $0000 */
-        uint32_t low = c->rom_bank & 0x1F ? c->rom_bank & 0x1F : 1;
-        b = high ? (uint32_t)c->bank2 << 5 | low : c->mode ? (uint32_t)c->bank2 << 5 : 0;
+        uint32_t low = c->rom_bank & 0x1F ? c->rom_bank & 0x1F : 1, sh = c->multicart ? 4 : 5;
+        if (c->multicart) low &= 0x0F;  /* the 0 -> 1 rule sees all five bits */
+        b = high ? (uint32_t)c->bank2 << sh | low : c->mode ? (uint32_t)c->bank2 << sh : 0;
         break;
     }
     case MBC_2: case MBC_3: b = high ? (c->rom_bank ? c->rom_bank : 1) : 0; break;

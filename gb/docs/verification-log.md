@@ -5,6 +5,24 @@ reproducible check is not "verified".
 
 Checks of shared parts: [docs/verification-log.md](../../docs/verification-log.md).
 
+## 2026-11-19 · Game Boy: timer edge, serial phase, MBC1 multicart, speed switch time
+- mooneye `timer/rapid_toggle` (a TAC write that enables a bit that fell
+  in that same cycle counts as a falling edge), `serial/boot_sclk_align`
+  (the first bit goes at DIV's next bit-8 fall, 7 more follow at 128 cycles;
+  the constant -1 is the one value of -140..140 that passes) and
+  `emulator-only/mbc1/multicart_rom_8Mb` (bank bits shifted by 4) pass.
+- The CGB speed switch takes 2050 M-cycles in the old speed, then DIV is
+  reset (reset before the wait fails AGE spsw-div; waits of 2030-2068
+  and 4100 all pass it, so the length rests on Pan Docs). AGE spsw-div shows
+  "TEST PASSED!"; gambatte start_stop1/2 inc_1/inc_2 show their names' 00
+  and 01 (`tests/gb/test_roms.py` TestSpeedSwitch). AGE's tima, mode0,
+  ch2-lc-delay and stop-prefetch ROMs fail with or without the wait.
+- 77 sampled games, 1800 frames with `--play`, before and after: 74 the
+  same picture, 3 Color games differ by timing only (still in play or menu).
+  Lockstep with `--diff`, 1800 frames with `--play`: the 3 Color games
+  that differ (all switch speed) and 3 Game Boy games, no divergence.
+- The GB suites pass.
+
 ## 2026-11-19 · Game Boy: stereo sound
 - 30 s of one game recorded with `gb_headless --wav` (now stereo): the mean
   of left and right has, per 5 s, exactly the RMS the mono output had in

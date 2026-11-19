@@ -32,6 +32,15 @@ static uint8_t dma_peek(Gb *g, uint16_t a) {
 }
 
 static void tick(Gb *g);
+/* A TAC write after its cycle's tick (d0: DIV before it, old: TAC before). Switching
+ * the selected bit or disabling can make a falling edge; so does enabling a bit that
+ * fell in this very cycle (mooneye rapid_toggle). */
+static void timer_tac_write(Gb *g, uint8_t v, uint16_t d0, uint8_t old) {
+    int before = timer_bit(g->div, old);
+    int fell_now = !timer_bit(d0, old) && timer_bit(d0, v & 7);
+    g->tac = v & 7;
+    if ((before || fell_now) && !timer_bit(g->div, g->tac)) timer_inc(g);
+}
 /* HDMA: 16 bytes to VRAM; the CPU waits 8 M-cycles of normal speed (Pan Docs "VRAM DMA Transfers") */
 static void hdma_block(Gb *g) {
     for (int i = 0; i < 16; i++) {
@@ -125,7 +134,7 @@ static void io_write(Gb *g, uint16_t a, uint8_t v) {
         g->sc = v & 0x81;
         if ((v & 0x81) == 0x81) {  /* internal clock: send SB */
             if (g->serial_n < (int)sizeof g->serial_out - 1) g->serial_out[g->serial_n++] = (char)g->sb;
-            g->serial_left = 8 * 128;
+            g->serial_left = (512 - (g->div & 511)) / 4 + 7 * 128 - 1;  /* the first bit goes at DIV's next bit-8 fall; -1 as measured by boot_sclk_align */
         }
         return;
     case 0xFF04: {  /* reset the counter; a falling edge on the way counts */
@@ -143,12 +152,7 @@ static void io_write(Gb *g, uint16_t a, uint8_t v) {
         g->tma = v;
         if (g->tima_reload == 2) g->tima = v;
         return;
-    case 0xFF07: {  /* switching the selected bit or disabling can make an edge */
-        int before = timer_bit(g->div, g->tac);
-        g->tac = v & 7;
-        if (before && !timer_bit(g->div, g->tac)) timer_inc(g);
-        return;
-    }
+    case 0xFF07: return;  /* gb_write: the tick comes first */
     case 0xFF0F: g->ifl = v & 0x1F; return;
     case 0xFF40: ppu_lcdc_write(g, v); return;
     case 0xFF41: ppu_stat_write(g, v); return;
@@ -244,6 +248,14 @@ uint8_t gb_read(GbCpu *c, uint16_t a) {
 }
 void gb_write(GbCpu *c, uint16_t a, uint8_t v) {
     Gb *g = c->bus;
+    if (a == 0xFF07) {  /* TAC takes effect at the end of the cycle; see timer_tac_write */
+        uint16_t d0 = g->div;
+        uint8_t old = g->tac;
+        tick(g);
+        hdma_poll(g);
+        timer_tac_write(g, v, d0, old);
+        return;
+    }
     tick(g);
     hdma_poll(g);
     if (!dma_conflict(g, a) && !ppu_owns(g, a)) bus_write(g, a, v);
@@ -305,10 +317,13 @@ void gb_step(Gb *g) {
      * next opcode byte is read twice (the "HALT bug") */
     if (c->halted && !c->ime && (g->ie & g->ifl & 0x1F)) c->halted = 0, c->halt_bug = 1;
     /* CGB: STOP with KEY1 armed switches the speed and goes on past the byte
-     * after it (2 bytes then; a game puts $E3 there); DIV restarts.
-     * shortcut: the switch takes no time (hardware: ~2050 M-cycles), until a game minds */
-    if (c->stopped && g->cgb && g->key1)
-        g->double_speed ^= 1, g->key1 = 0, c->stopped = 0, g->div = 0, g->half = 0, c->pc++;
+     * after it (2 bytes then; a game puts $E3 there). The CPU waits about 2050
+     * M-cycles while the rest of the machine runs; DIV restarts. */
+    if (c->stopped && g->cgb && g->key1) {
+        for (int i = 0; i < 2050; i++) c->cycles++, tick(g);  /* in the old speed; DIV restarts at the end (age spsw-div) */
+        g->double_speed ^= 1, g->half = 0, g->div = 0;
+        g->key1 = 0, c->stopped = 0, c->pc++;
+    }
 }
 
 void gb_run_frame(Gb *g) {

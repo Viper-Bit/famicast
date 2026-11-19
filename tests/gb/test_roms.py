@@ -7,7 +7,9 @@ shows up here and moves them out). The ROMs report on the serial port or in
 cartridge RAM; no picture is needed.
 """
 import os
+import hashlib
 import subprocess
+import tempfile
 import unittest
 
 from tests.fetch_test_roms import fetch_gb_test_roms
@@ -41,10 +43,6 @@ OPEN = {
     "mooneye-test-suite/acceptance/ppu/lcdon_write_timing-GS.gb": PPU,
     "mooneye-test-suite/acceptance/ppu/stat_lyc_onoff.gb": PPU,
     "mooneye-test-suite/acceptance/ppu/vblank_stat_intr-GS.gb": PPU,
-    "mooneye-test-suite/acceptance/serial/boot_sclk_align-dmgABCmgb.gb": "the serial clock's phase at boot",
-    "mooneye-test-suite/acceptance/timer/rapid_toggle.gb": "interrupt one loop late (BC $FFD8, want $FFD9): "
-                                                           "TAC write timing within the cycle",
-    "mooneye-test-suite/emulator-only/mbc1/multicart_rom_8Mb.gb": "MBC1 multicart wiring not supported",
 }
 
 
@@ -76,6 +74,37 @@ class TestGbRoms(unittest.TestCase):
                 else:
                     self.assertEqual(last, "result: passed", r.stdout[-500:] + r.stderr)
         self.assertEqual(sorted(set(OPEN) - set(found)), [], "OPEN lists ROMs that are not in the suites")
+
+
+@built(RUNNER, "build gb_headless first")
+class TestSpeedSwitch(unittest.TestCase):
+    """The CGB speed switch (about 2050 M-cycles, DIV restarts). These ROMs show their result
+    on the screen: AGE's spsw-div prints "TEST PASSED!"; gambatte's start_stop ROMs print the
+    two-digit value in their name (compared with each other: same out, same picture)."""
+    PASSED_TITLE = "de78e0120f9452b597645d384b355feb"  # md5 of the first 14 rows of AGE's "TEST PASSED!"
+
+    def shot(self, rom, rows):
+        with tempfile.TemporaryDirectory() as tmp:
+            out = os.path.join(tmp, "f.ppm")
+            subprocess.run([RUNNER, rom, "--frames", "300", "--ppm", out], capture_output=True)
+            with open(out, "rb") as f:
+                return f.read().split(b"\n", 3)[3][:160 * 3 * rows]
+
+    def test_age_spsw_div(self):
+        rom = os.path.join(fetch_gb_test_roms(), "age-test-roms", "speed-switch", "spsw-div-cgbBCE.gb")
+        self.assertEqual(hashlib.md5(self.shot(rom, 14)).hexdigest(), self.PASSED_TITLE)
+
+    def test_gambatte_start_stop(self):
+        d = os.path.join(fetch_gb_test_roms(), "gambatte", "div")
+        shots = {}
+        for n in sorted(os.listdir(d)):
+            if n.startswith("start_stop"):
+                shots.setdefault(n.split("_out")[1][:2], []).append(self.shot(os.path.join(d, n), 8))
+        self.assertEqual(sorted(shots), ["00", "01"])
+        for out, group in shots.items():
+            self.assertEqual(len(group), 2)
+            self.assertEqual(group[0], group[1], f"out{out}")
+        self.assertNotEqual(shots["00"][0], shots["01"][0])
 
 
 if __name__ == "__main__":

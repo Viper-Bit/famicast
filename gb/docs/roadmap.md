@@ -9,7 +9,7 @@ Exit tests and results: [verification-log.md](verification-log.md).
 | Milestone | Content | State |
 |---|---|---|
 | [G1](#g1--sm83-cpu) | SM83 CPU from templates, interpreter | done |
-| [G2](#g2--memory-timer-cartridges) | memory map, timer, interrupts, MBC1/2/3/5 | done (1 timer test open) |
+| [G2](#g2--memory-timer-cartridges) | memory map, timer, interrupts, MBC1/2/3/5 | done |
 | [G3](#g3--ppu-and-frontend) | PPU, the window program (core/frontend) | done (8 PPU timing tests open) |
 | [G4](#g4--apu) | sound | done |
 | [G5](#g5--recompiler) | recompiler, lockstep diff | done (code in RAM interpreted) |
@@ -37,10 +37,11 @@ Exit tests and results: [verification-log.md](verification-log.md).
 - [x] **Exit:** blargg `cpu_instrs` (all 11 and combined), `instr_timing`,
   `mem_timing`, `mem_timing-2`, `halt_bug`; mooneye acceptance (timer,
   interrupts, OAM DMA, instruction timing, DMG boot state) and MBC1/2/5:
-  102 ROMs pass (`tests/gb/test_roms.py`). Open: `timer/rapid_toggle`
-  (the interrupt one loop late), the MBC1 multicart wiring, the serial
-  clock's boot phase, and boot tests of other models; 9 PPU timing tests
-  belong to G3.
+  102 ROMs pass (`tests/gb/test_roms.py`); since then `timer/rapid_toggle`
+  (a TAC write that enables a bit falling in that cycle counts), the
+  serial clock's phase (the first bit goes at DIV's next bit-8 fall) and
+  the MBC1 multicart wiring (`gb/runtime/cart.c`) pass. Open: boot tests
+  of other models; 8 PPU timing tests belong to G3.
 
 ## G3 · PPU and frontend
 - [x] `gb/runtime/ppu.c`: background, window (its own line counter),
@@ -90,12 +91,12 @@ Exit tests and results: [verification-log.md](verification-log.md).
   (in the bus cycle, so recompiled code waits where the interpreter
   does), the CGB's separate WRAM bus during OAM DMA, no STAT-write
   interrupt, the APU's CGB details; the speed switch skips the byte after
-  STOP.
+  STOP and takes 2050 M-cycles (DIV restarts at the end).
 - [x] **Exit:** cgb-acid2 pixel for pixel, blargg cgb_sound (12 singles
   and the combined ROM); 36 sampled Color games reach title, menu or
   play screens; 18 recompiled in lockstep.
 - [ ] Open: DMG games are not run in the CGB's compatibility mode (its
-  palettes; mooneye's CGB boot tests are of that mode), the speed switch
-  takes no time, the CGB boot DIV value is unchecked, palette RAM is not
+  palettes; mooneye's CGB boot tests are of that mode), the CGB boot DIV
+  value is unchecked, AGE's spsw tima/mode0/ch2/prefetch ROMs fail, palette RAM is not
   closed during mode 3, cgb-acid-hell (needs mid-line rendering).
 
