@@ -47,8 +47,25 @@ program was closed.
 ## Recompiling
 `.gb` and `.gbc` files go in `ROMS` (root README); the build traces each
 game first (`gb_headless --play --misses`). Code in RAM (HRAM DMA routines,
-some games' WRAM code) always runs in the interpreter. Not yet: hint files
-and the misses of your own play, as the NES has.
+some games' WRAM code) always runs in the interpreter. ROM code the trace
+did not reach runs in the interpreter too. Two more ways to recompile it:
+- **By playing**: a recompiled game notes the ROM code it had to interpret
+  in `build/<name>.misses` (setting `record_misses` in its `.ini`, on by
+  default; written when you close the window, only if something is new);
+  the next `cmake --build build --config Release` sees the file changed
+  and recompiles the game with those addresses. Lines are `MISS $PC bank B`,
+  as `gb_headless --misses` writes them.
+- **By hand**: `gb/games/<name>.toml` (`<name>` as the program's, see the
+  root README), read by the build when present:
+  ```
+  rom_fnv1a = "1A2B3C4D"        # the dump it was made for (warns if another)
+  entries = [0x0150]            # code in bank 0, $0000-$3FFF
+  banked = [[3, 0x4100]]        # [ROM bank, address $0000-$7FFF] of code
+  data = [[3, 0x5000, 0x5100]]  # [ROM bank, first, end) never decoded as code
+  ```
+  `gbrecomp ROM -o OUT.c --hints GAME.toml --misses FILE` does the same by
+  hand. A wrong hint costs coverage, never correctness: what is not
+  recompiled runs in the interpreter.
 
 `build/game_one_headless --play --diff` runs the interpreter in lockstep and
 reports the first difference.

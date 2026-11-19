@@ -87,6 +87,9 @@ uint32_t gb_rom_hash(const Gb *g);     /* FNV-1a of the ROM (recompiled code is 
 /* misses: one slot per (ROM bank, address) for code at $0000-$7FFF */
 static inline size_t gb_miss_slots(const Gb *g) { return (size_t)g->cart.rom_size / 0x4000 * 0x8000; }
 void gb_misses_write(const Gb *g, FILE *f);  /* "MISS $PC bank B" lines */
+/* Adds the lines of such a file to g->misses. Returns how many slots set
+ * before the call the file did not list (0: nothing new to write). */
+long gb_misses_merge(Gb *g, const char *path);
 
 /* save states: the whole machine, for this ROM (by hash) and this build's layout */
 int gb_state_save(const Gb *g, const char *path);

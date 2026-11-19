@@ -45,7 +45,10 @@ bus cycle, so recompiled code waits for them where the interpreter does.
   in the other window is not known at build time, so flow into it is
   resolved at run time.
 - **Entries**: the reset, RST and interrupt vectors in bank 0, and every
-  (bank, address) the trace ran (`gb_headless --misses`, by `AUTO_HINTS`).
+  (bank, address) the trace ran (`gb_headless --misses`, by `AUTO_HINTS`),
+  the program's own `NAME.misses` (written by the frontend when you play)
+  and the hint file `gb/games/NAME.toml` (entries, and data ranges that are
+  never decoded).
 - **Blocks end** at jumps, calls, returns, HALT, STOP and EI (IME turns on
   in the dispatcher, before the next instruction).
 - **Dispatch** (`gb_step`): interrupt entry and halted cycles as in the

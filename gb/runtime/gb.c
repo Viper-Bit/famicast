@@ -442,3 +442,22 @@ void gb_misses_write(const Gb *g, FILE *f) {
     for (size_t i = 0; g->misses && i < gb_miss_slots(g); i++)
         if (g->misses[i]) fprintf(f, "MISS $%04X bank %u\n", (unsigned)(i & 0x7FFF), (unsigned)(i / 0x8000));
 }
+
+long gb_misses_merge(Gb *g, const char *path) {
+    size_t slots = gb_miss_slots(g);
+    uint8_t *listed = calloc(slots, 1);
+    FILE *f = fopen(path, "r");
+    char line[128];
+    unsigned pc, bank;
+    while (listed && f && fgets(line, sizeof line, f))
+        if (sscanf(line, "MISS $%x bank %u", &pc, &bank) == 2 && pc < 0x8000 && (size_t)bank * 0x8000 + pc < slots)
+            listed[bank * 0x8000 + pc] = 1;
+    if (f) fclose(f);
+    long fresh = 0;
+    for (size_t i = 0; listed && i < slots; i++) {
+        fresh += g->misses[i] && !listed[i];
+        g->misses[i] |= listed[i];
+    }
+    free(listed);
+    return fresh;
+}

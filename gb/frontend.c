@@ -42,7 +42,7 @@ int sys_setting(const char *key, const char *val) {
 static Gb gb;
 static uint8_t *rom;
 static size_t rom_size;
-static char sav_path[1024];
+static char sav_path[1024], misses_path[1024];
 enum { RTC_BYTES = 5 + 5 + 8 };  /* the clock, as latched, the time of saving (seconds, little endian) */
 
 static void load_sav(void) {
@@ -81,7 +81,6 @@ static void save_sav(void) {
 }
 
 int sys_open(const char *path, const Settings *settings, SysInfo *info, char *err, size_t errlen) {
-    (void)settings;
     const int embedded = !path && gb_recomp_program && gb_recomp_program->rom;
     if (!path && !embedded) return SDL_snprintf(err, errlen, "usage: %s ROM [--frames N] [--record FILE] [--replay FILE]", APP_NAME), 2;
     if (embedded) {  /* saves and states: the ROM's file name next to the program */
@@ -101,6 +100,9 @@ int sys_open(const char *path, const Settings *settings, SysInfo *info, char *er
     SDL_snprintf(info->state_path, sizeof info->state_path, "%s.state", sav_path);
     SDL_strlcat(sav_path, ".sav", sizeof sav_path);
     if (gb.cart.battery) load_sav();
+    /* recompiled game: note the ROM code interpreted, in <program>.misses (read by the next build) */
+    SDL_snprintf(misses_path, sizeof misses_path, "%s%s.misses", SDL_GetBasePath(), APP_NAME);
+    if (gb.recomp_on && settings->record_misses) gb.misses = SDL_calloc(gb_miss_slots(&gb), 1);
     const char *name = path;  /* the settings' palette is for DMG games on a DMG; CGB games bring their own colours */
     for (const char *p = path; *p; p++)
         if (*p == '/' || *p == '\\') name = p + 1;
@@ -119,9 +121,12 @@ int sys_open(const char *path, const Settings *settings, SysInfo *info, char *er
 void sys_reset(void) {
     static GbCart keep;
     keep = gb.cart;
+    uint8_t *misses = gb.misses;  /* gb_load clears the Gb */
     gb_free(&gb);
     char err[128];
-    if (gb_load_model(&gb, rom, rom_size, model, err, sizeof err) != 0) return;
+    int bad = gb_load_model(&gb, rom, rom_size, model, err, sizeof err);
+    gb.misses = misses;
+    if (bad) return;
     memcpy(gb.cart.ram, keep.ram, sizeof keep.ram);
     memcpy(gb.cart.rtc, keep.rtc, sizeof keep.rtc);
 }
@@ -154,6 +159,14 @@ const char *sys_key(int key, char *buf, size_t len) { (void)key, (void)buf, (voi
 
 void sys_close(void) {
     save_sav();
+    /* rewrite the misses file only when this session found new ROM code, so
+     * the next build does not rerun the recompiler for nothing */
+    if (gb.misses && gb_misses_merge(&gb, misses_path) != 0) {
+        FILE *f = fopen(misses_path, "w");
+        if (f) gb_misses_write(&gb, f), fclose(f);
+        else SDL_Log("%s: cannot write", misses_path);
+    }
+    SDL_free(gb.misses);
     gb_free(&gb);
     SDL_free(rom);
 }

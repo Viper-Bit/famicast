@@ -84,7 +84,7 @@ set(AUTO_HINTS_FRAMES 6000 CACHE STRING "Frames of scripted play traced by AUTO_
 # Your own games (never committed): -DROMS="a.nes;b.fds;c.gb;d.gbc" (.fds needs FDS_BIOS).
 # Target name = file name without "(...)"/"[...]" tags, lower case,
 # non-alphanumerics -> '_' (e.g. "Arkista's Ring (U) [!].nes" -> arkista_s_ring);
-# hints are read from nes/games/<name>.toml when present.
+# hints are read from nes/games/<name>.toml or gb/games/<name>.toml when present.
 set(ROMS "" CACHE STRING "ROM files (.nes, .fds, .gb, .gbc) to recompile (semicolon-separated)")
 # Relative paths are relative to the folder cmake was run from (for the
 # release kit that is the archive folder, not kit/), else to this source
@@ -155,7 +155,7 @@ foreach(rom IN LISTS ROMS)
     if(NOT sys IN_LIST SYSTEMS)
         message(FATAL_ERROR "ROMS: ${rom} is a ${sys} game, but SYSTEMS is ${SYSTEMS}")
     elseif(sys STREQUAL "gb")
-        gb_recompile(${name} "${rom}")
+        gb_recompile(${name} "${rom}" ${CMAKE_SOURCE_DIR}/gb/games/${name}.toml)
     else()
         nes_recompile(${name} "${rom}" ${NES_DIR}/games/${name}.toml)
         list(APPEND game_names ${name})

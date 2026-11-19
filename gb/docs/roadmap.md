@@ -78,8 +78,9 @@ Exit tests and results: [verification-log.md](verification-log.md).
 - [x] **Exit:** `gb_headless --diff` (CPU after every step, the whole
   machine after every frame): 21 sampled games and blargg cpu_instrs in
   lockstep; 94.8-99.8% of CPU cycles recompiled in 19 of the 21.
-- [ ] Open: code run from WRAM (two of the 21 games: 29% and 74%), hint
-  files and play misses (as the NES has), and speed: recompiled runs as
+- [x] Hint files (`gb/games/NAME.toml`) and the misses of your own play
+  (`NAME.misses`, written by the window program), as the NES has.
+- [ ] Open: code run from WRAM (two of the 21 games: 29% and 74%), and speed: recompiled runs as
   fast as the interpreter, every access ticking the PPU and APU (a
   catch-up scheme, as the NES's, would be the next step).
 

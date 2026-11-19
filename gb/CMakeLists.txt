@@ -42,11 +42,21 @@ endif()
 # NAME_headless (and NAME with the frontend). AUTO_HINTS: the game is first
 # traced in the interpreter with scripted input (gb_headless --play
 # --misses), so the code that session reached is recompiled; once per ROM.
+# Hints: gb/games/NAME.toml when present (gb/recomp/main.c has the format).
+# NAME.misses next to the program: ROM code your own sessions had to
+# interpret (the frontend writes it, setting record_misses); always passed to
+# gbrecomp, so playing and rebuilding recompiles what you reached.
+#
 # EMBED_ROM=OFF: the program needs the ROM file at start (the generated
 # code still holds the game's code: not for sharing either).
 function(gb_recompile name rom)
     set(out ${GEN_DIR}/${name}.c)
     set(args "")
+    set(hints "")
+    if(ARGC GREATER 2 AND EXISTS "${ARGV2}")
+        set(hints "${ARGV2}")
+        list(APPEND args --hints "${ARGV2}")
+    endif()
     set(trace "")
     if(AUTO_HINTS)
         set(trace ${GEN_DIR}/${name}.trace)
@@ -58,13 +68,18 @@ function(gb_recompile name rom)
             COMMENT "Tracing ${name} in the interpreter (${AUTO_HINTS_FRAMES} frames)")
         list(APPEND args --misses ${trace})
     endif()
+    set(played ${CMAKE_BINARY_DIR}/${name}.misses)
+    if(NOT EXISTS ${played})
+        file(TOUCH ${played})
+    endif()
+    list(APPEND args --misses ${played})
     if(NOT EMBED_ROM)
         list(APPEND args --no-rom)
     endif()
     add_custom_command(
         OUTPUT ${out}
         COMMAND gbrecomp "${rom}" -o ${out} ${args}
-        DEPENDS "${rom}" ${trace} gbrecomp
+        DEPENDS "${rom}" ${hints} ${trace} ${played} gbrecomp
         WORKING_DIRECTORY ${CMAKE_BINARY_DIR}
         COMMENT "Recompiling ${name}")
     add_library(${name}_code STATIC ${out})

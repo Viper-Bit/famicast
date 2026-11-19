@@ -5,6 +5,26 @@ reproducible check is not "verified".
 
 Checks of shared parts: [docs/verification-log.md](../../docs/verification-log.md).
 
+## 2026-11-19 · Game Boy G5: hint files and the misses of your own play
+- **Hint files** (`gb/games/NAME.toml`: `entries`, `banked`, `data`, `rom_fnv1a`)
+  and `NAME.misses`: 8 new tests in `tests/gb/test_recomp.py` on a made-up
+  ROM (hint entries become blocks, data ranges are never decoded, a trace
+  and hints together, another dump warns, malformed files exit with 2, a
+  missing file is fine).
+- **Play misses**: 4 games built with `-DAUTO_HINTS=OFF` (so only the
+  vectors are recompiled), `NAME --frames 600` in the window program (no
+  input, dummy video and audio) wrote `NAME.misses` (1347 lines for one
+  game); a second session with nothing new left the file untouched. After
+  `cmake --build` the same game ran 33.1% recompiled in 3000 frames of
+  `--play`, before, and 45.8% after, `--diff` OK. A real session with
+  input reaches more.
+- **With the trace** (default build, 1800 frames `--play --diff`, 4 games):
+  no difference in any; recompiled 97.66%, 97.68%, 99.82%, 99.74%. The ROM
+  code left over is small (20,000 frames of play found 16 and 104 new
+  addresses in two of them: +0.001 and +0.011 points once rebuilt with them);
+  the rest of the interpreted cycles is code in RAM, which no hint reaches.
+- The whole suite passes; `-DSYSTEMS=nes` and `-DSYSTEMS=gb` build.
+
 ## 2026-11-19 · Game Boy models: compatibility mode and boot states
 - **Boot tests**: the nine mooneye acceptance boot ROMs that were open
   (boot_div-S, boot_div2-S, boot_div-dmg0, boot_hwio-S, boot_hwio-dmg0,

@@ -74,6 +74,8 @@ static int decode(const Region *R, uint16_t pc, Ins *out) {
     int op = R->mem[pc], cb = op == 0xCB;
     int size = cb ? 2 : sm83_size(op);
     if (!in_window(R, pc) || !in_window(R, (uint32_t)pc + size - 1)) return 0;
+    for (int k = 0; k < size; k++)
+        if (R->data[(uint16_t)(pc + k)]) return 0;
     out->pc = pc, out->size = (uint8_t)size, out->cb = (uint8_t)cb;
     out->op = (uint8_t)(cb ? R->mem[(uint16_t)(pc + 1)] : op);
     return 1;
@@ -204,7 +206,7 @@ static void emit_block(Buf *o, const Region *R, const uint8_t *starts, uint16_t 
     bprintf(o, "}\n\n");
 }
 
-static uint32_t fnv1a(const uint8_t *d, size_t n) {
+uint32_t fnv1a(const uint8_t *d, size_t n) {
     uint32_t h = 2166136261u;
     for (size_t i = 0; i < n; i++) h = (h ^ d[i]) * 16777619u;
     return h;

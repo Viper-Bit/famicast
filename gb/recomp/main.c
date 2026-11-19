@@ -1,8 +1,14 @@
 /* gbrecomp: the Game Boy recompiler (build-time tool).
- *   gbrecomp ROM -o OUT.c [--misses TRACE]... [--no-rom]
- *                                   recompile ROM; TRACE: gb_headless --misses output
- *                                   (each "MISS $PC bank B" an entry); --no-rom: do not
- *                                   embed the ROM (the program then needs the file)
+ *   gbrecomp ROM -o OUT.c [--hints GAME.toml]... [--misses TRACE]... [--no-rom]
+ *                                   recompile ROM; TRACE: gb_headless --misses output or a
+ *                                   program's NAME.misses (each "MISS $PC bank B" an entry);
+ *                                   --no-rom: do not embed the ROM (the program needs the file)
+ * Hints (gb/games/NAME.toml, TOML subset, as the NES's):
+ *   rom_fnv1a = "1A2B3C4D"          # the dump they were made for (a warning if it differs)
+ *   entries = [0x0150, 0x0200]      # code in bank 0, $0000-$3FFF
+ *   banked = [[3, 0x4100]]          # [ROM bank, address $0000-$7FFF] of code
+ *   data = [[3, 0x5000, 0x5100]]    # [ROM bank, first, end) never decoded as code
+ *
  *   gbrecomp --cpu-switch OUT.inc   the interpreter's opcode switch (gb/runtime/cpu.c)
  *   gbrecomp --ops                  every opcode: "CB? XX size name" (tests) */
 #include <stdio.h>
@@ -22,13 +28,81 @@ static Region *region(Region **regions, const GbCart *cart, int bank, int window
     return *r;
 }
 
+typedef struct { unsigned v[16384]; size_t n; } Ints;
+
+static void bad(const char *path, const char *what) {
+    fprintf(stderr, "%s: %s\n", path, what);
+    exit(2);
+}
+
+/* The integers of `key = [...]` (nested arrays flattened); none if absent. */
+static void hint_ints(const char *text, const char *path, const char *key, Ints *out) {
+    size_t n = strlen(key);
+    const char *p = text;
+    for (; (p = strstr(p, key)); p += n) {
+        const char *q = p + n;
+        while (*q == ' ' || *q == '\t') q++;
+        if ((p == text || p[-1] == '\n') && *q == '=') { p = q + 1; break; }
+    }
+    if (!p) return;
+    while (*p == ' ' || *p == '\t') p++;
+    if (*p != '[') bad(path, "a key is not an array");
+    for (int depth = 0; *p;) {
+        if (*p == '[') depth++, p++;
+        else if (*p == ']') { p++; if (--depth == 0) return; }
+        else if (*p >= '0' && *p <= '9') {
+            char *end;
+            if (out->n == sizeof out->v / sizeof *out->v) bad(path, "too many numbers in a key");
+            out->v[out->n++] = (unsigned)strtoul(p, &end, 0);
+            p = end;
+        } else if (strchr(" \t\r\n,", *p)) p++;
+        else bad(path, "unexpected character in an array");
+    }
+    bad(path, "unterminated array");
+}
+
+/* Hints into the regions; a missing file is fine (games/NAME.toml may not exist). */
+static void load_hints(const char *path, Region **regions, const GbCart *cart, int nbanks) {
+    FILE *f = fopen(path, "rb");
+    if (!f) return;
+    char *text = calloc(1, 1 << 20);
+    size_t n = text ? fread(text, 1, (1 << 20) - 1, f) : 0;
+    if (!text || ferror(f)) { perror(path); exit(2); }
+    (void)n;  /* NUL-terminated by calloc */
+    fclose(f);
+    for (char *p = text; (p = strchr(p, '#'));)  /* comments (no '#' inside the strings we use) */
+        while (*p && *p != '\n') *p++ = ' ';
+    const char *h = strstr(text, "rom_fnv1a");
+    unsigned want;
+    if (h && (h = strchr(h, '"')) && sscanf(h, "\"%8x\"", &want) == 1 && want != fnv1a(cart->rom, cart->rom_size))
+        fprintf(stderr, "gbrecomp: warning: %s is for another dump (rom_fnv1a %08X); entries may miss\n", path, want);
+    Ints e = {0}, b = {0}, d = {0};
+    hint_ints(text, path, "entries", &e);
+    hint_ints(text, path, "banked", &b);
+    hint_ints(text, path, "data", &d);
+    if (b.n % 2 || d.n % 3) bad(path, "banked needs [bank, address], data [bank, first, end]");
+    for (size_t i = 0; i < e.n; i++) {
+        if (e.v[i] >= 0x4000) bad(path, "entries are bank 0 addresses below $4000 (use banked)");
+        region(regions, cart, 0, 0)->entries[e.v[i]] = 1;
+    }
+    for (size_t i = 0; i < b.n; i += 2) {
+        if (b.v[i] >= (unsigned)nbanks || b.v[i + 1] >= 0x8000) bad(path, "banked: bank or address outside the ROM");
+        region(regions, cart, (int)b.v[i], (int)(b.v[i + 1] >> 14))->entries[b.v[i + 1]] = 1;
+    }
+    for (size_t i = 0; i < d.n; i += 3) {
+        if (d.v[i] >= (unsigned)nbanks || d.v[i + 1] > d.v[i + 2] || d.v[i + 2] > 0x8000) bad(path, "data: bad range");
+        for (unsigned a = d.v[i + 1]; a < d.v[i + 2]; a++) region(regions, cart, (int)d.v[i], (int)(a >> 14))->data[a] = 1;
+    }
+    free(text);
+}
+
 static int recompile(int argc, char **argv) {
     const char *rom_path = argv[1], *out = NULL;
     int embed = 1;
     for (int i = 2; i < argc; i++)
         if (!strcmp(argv[i], "-o") && i + 1 < argc) out = argv[++i];
         else if (!strcmp(argv[i], "--no-rom")) embed = 0;
-        else if (!strcmp(argv[i], "--misses") && i + 1 < argc) i++;  /* read below, once the ROM is in */
+        else if ((!strcmp(argv[i], "--misses") || !strcmp(argv[i], "--hints")) && i + 1 < argc) i++;  /* read below, once the ROM is in */
         else { fprintf(stderr, "gbrecomp: unknown option %s\n", argv[i]); return 2; }
     if (!out) { fprintf(stderr, "gbrecomp: -o OUT.c is needed\n"); return 2; }
     FILE *f = fopen(rom_path, "rb");
@@ -49,6 +123,8 @@ static int recompile(int argc, char **argv) {
     Region *r0 = region(regions, &cart, 0, 0);
     r0->entries[0x100] = 1;
     for (int v = 0; v <= 0x60; v += 8) r0->entries[v] = 1;
+    for (int i = 2; i < argc; i++)
+        if (!strcmp(argv[i], "--hints")) load_hints(argv[++i], regions, &cart, nbanks);
     long misses = 0;
     for (int i = 2; i < argc; i++) {
         if (strcmp(argv[i], "--misses")) continue;
@@ -97,6 +173,6 @@ int main(int argc, char **argv) {
         return 0;
     }
     if (argc >= 2 && argv[1][0] != '-') return recompile(argc, argv);
-    fprintf(stderr, "usage: gbrecomp ROM -o OUT.c [--misses TRACE]... [--no-rom] | --cpu-switch OUT.inc | --ops\n");
+    fprintf(stderr, "usage: gbrecomp ROM -o OUT.c [--hints GAME.toml]... [--misses TRACE]... [--no-rom] | --cpu-switch OUT.inc | --ops\n");
     return 2;
 }
