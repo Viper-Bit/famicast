@@ -1,10 +1,10 @@
 /* Game Boy without a window, for tests (tests/gb/test_roms.py, test_gb_recomp.py).
  *   gb_headless ROM [--frames N] [--pgm FILE] [--wav FILE] [--play] [--state-at F FILE] [--load-state FILE]
- *               [--misses FILE] [--diff] [--coverage] [--ppm FILE] [--model dmg|cgb]
+ *               [--misses FILE] [--diff] [--coverage] [--ppm FILE] [--model dmg|cgb|...]
  *   --pgm         write the last whole frame as a grey image (shade 0 = white)
  *   --wav         write the sound (48 kHz stereo, 16-bit)
  *   --ppm         write the last whole frame in colour (CGB: 5-bit components as (c << 3) | (c >> 2))
- *   --model       run as a DMG or a CGB (default: what the header asks for)
+ *   --model       run as this model: dmg, cgb (a DMG game: compatibility mode), cgb0, agb, dmg0, mgb, sgb, sgb2 (boot state only) (default: what the header asks for)
  *   --play        scripted input: Start and A taps, later walking right
  *   --state-at    save a state before frame F; --load-state: start from one
  *   --misses      write the ROM code the interpreter ran ("MISS $PC bank B",
@@ -68,7 +68,7 @@ static const struct { const char *name; size_t off, len; } FIELDS[] = {
     F(tima_reload), F(sb), F(sc), F(serial_left), F(serial_out), F(serial_n), F(p1), F(pad), F(lcdc), F(stat),
     F(scy), F(scx), F(ly), F(lyc), F(wy), F(wx), F(stat_line), F(mode), F(wy_hit), F(win_line), F(dot),
     F(mode3_end), F(fb), F(frame), F(frame_count), F(dma_reg), F(dma_start), F(dma_on), F(dma_pos), F(dma_src),
-    F(dma_next), F(frame_end), F(cgb), F(vbk), F(svbk), F(opri), F(key1), F(double_speed), F(half), F(bcps),
+    F(dma_next), F(frame_end), F(cgb), F(compat), F(vbk), F(svbk), F(opri), F(key1), F(double_speed), F(half), F(bcps),
     F(ocps), F(bg_pal), F(obj_pal), F(hdma_src), F(hdma_dst), F(hdma_left), F(hdma_on), F(hdma_due),
 };
 static const char *differs(const Gb *a, const Gb *b) {
@@ -132,8 +132,11 @@ int main(int argc, char **argv) {
         else if (!strcmp(argv[i], "--ppm") && i + 1 < argc) ppm = argv[++i];
         else if (!strcmp(argv[i], "--model") && i + 1 < argc) {
             const char *m = argv[++i];
-            model = !strcmp(m, "dmg") ? GB_MODEL_DMG : !strcmp(m, "cgb") ? GB_MODEL_CGB : -2;
-            if (model == -2) { fprintf(stderr, "gb_headless: --model dmg or cgb\n"); return 2; }
+            static const char *const NAMES[] = {"dmg", "cgb", "dmg0", "mgb", "sgb", "sgb2", "agb", "cgb0"};  /* GB_MODEL_* order */
+            model = -2;
+            for (int k = 0; k < 8; k++)
+                if (!strcmp(m, NAMES[k])) model = k;
+            if (model == -2) { fprintf(stderr, "gb_headless: --model dmg, cgb, cgb0, agb, dmg0, mgb, sgb or sgb2\n"); return 2; }
         }
         else { fprintf(stderr, "gb_headless: unknown option %s\n", argv[i]); return 2; }
     }

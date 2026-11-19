@@ -22,8 +22,15 @@ per-cycle stepping is most of the time).
 
 ## Models
 A game whose header asks for the Color ($0143 bit 7) runs in CGB mode, any
-other as on the original Game Boy (`gb_headless --model` forces one). CGB
-mode adds VRAM bank 1, WRAM banks 1-7, palette RAM, the map attributes and
+other as on the original Game Boy; `model` (`gb.ini`, `gb_headless
+--model`) forces one. A Game Boy game on a Color runs in compatibility mode
+(`Gb.compat`, set with `cgb`): DMG rules in the PPU (the map attributes, VRAM
+bank 1 and OAM-order priority are off), but the colour comes from palette
+RAM: BGP, OBP0 and OBP1 pick the shade, palettes 0 and 1 hold the colours the
+boot ROM chose (`cgb_compat.c`). Boot state comes from one table in
+`gb_load_model` (registers, DIV, with a second DIV for compatibility mode);
+`dmg0`, `mgb`, `sgb`, `sgb2`, `cgb0` and `agb` differ from the base models
+in that state only. CGB mode adds VRAM bank 1, WRAM banks 1-7, palette RAM, the map attributes and
 OAM-order object priority in the PPU, HDMA, the CGB's own WRAM bus during
 OAM DMA, the sound chip's CGB details, and double speed: the CPU, timer,
 serial and OAM DMA run twice as fast, the PPU (2 dots per cycle), sound

@@ -5,6 +5,38 @@ reproducible check is not "verified".
 
 Checks of shared parts: [docs/verification-log.md](../../docs/verification-log.md).
 
+## 2026-11-19 · Game Boy models: compatibility mode and boot states
+- **Boot tests**: the nine mooneye acceptance boot ROMs that were open
+  (boot_div-S, boot_div2-S, boot_div-dmg0, boot_hwio-S, boot_hwio-dmg0,
+  boot_regs-dmg0, -mgb, -sgb, -sgb2) pass with `gb_headless --model` set to
+  the model they name; the six `misc` ones (boot_div-A, boot_div-cgb0,
+  boot_div-cgbABCDE, boot_hwio-C, boot_regs-A, boot_regs-cgb) are DMG games
+  and pass as a Color (`--model cgb`, `cgb0`, `agb`: compatibility mode).
+  `tests/gb/test_roms.py` runs each with its model: 144 of 155 ROMs pass,
+  11 stay open (8 PPU timing, rapid_toggle, boot_sclk_align, multicart).
+- **DIV values**: found by running each DIV test for every counter start
+  value (steps of 4, the counter's M-cycle phase): exactly one value passes
+  each: DMG0 $182C, SGB $D85C (boot_div-S), SGB2 $D84C (boot_div2-S), CGB
+  $2674, CGB0 $2880, AGB $2678, all as a DMG game on that Color.
+  boot_hwio-dmg0 reads LY and STAT: the DMG0 must start in vblank (line
+  145); every dot from 84 to 252 of that line passes, 168 is a pick.
+- **Registers on the way**: found by dumping $FF00-$FF7F as a test ROM
+  and comparing with the table inside the mooneye ROMs: in compatibility
+  mode P1 $FF, KEY1 and SVBK read $FF, BCPS/OCPS $C8/$D0 (after the boot
+  ROM's 8 and 16 palette bytes), the object palettes $FF; $FF72-$FF77 on
+  any Color; the SGB has P1 $FF and no boot sound.
+- **Palettes**: the table and the checksum lookup are SameBoy's
+  (Expat licence, docs/sources.md); the lookup follows the boot ROM's
+  routine: licensee check ($14B = $01, or $33 with "01" at $144), sum of
+  the 16 title bytes, the 4th letter for the 29 shared checksums.
+- **Games**: 14 sampled Game Boy games (every third) of the licensed set,
+  30 s of scripted play with `--model cgb` on a colour contact sheet: all
+  14 reach title, menu or play screens, in Color-style palettes. 18 sampled
+  Color games give byte-identical last frames (`--ppm`) before and after
+  the change; Game Boy games with `auto` are unchanged by construction
+  (nothing but `model = cgb` or `--model` reaches the new code).
+- Suites: `tests/gb`, and the whole of `tests` with all systems built, pass.
+
 ## 2026-11-19 · Game Boy: timer edge, serial phase, MBC1 multicart, speed switch time
 - mooneye `timer/rapid_toggle` (a TAC write that enables a bit that fell
   in that same cycle counts as a falling edge), `serial/boot_sclk_align`

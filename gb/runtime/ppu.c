@@ -10,6 +10,9 @@
 
 #include "gb.h"
 
+/* The game uses the Color's features (not a DMG game on a Color: compatibility mode) */
+static int cgb_game(const Gb *g) { return g->cgb && !g->compat; }
+
 int ppu_mode(const Gb *g) { return g->lcdc & 0x80 ? g->mode : 0; }
 
 /* The STAT interrupt line is the OR of its enabled sources; it fires on a rising edge. */
@@ -75,21 +78,22 @@ static void draw_line(Gb *g, uint8_t objs[10], int nobj, int window) {
     int wx = g->wx - 7;
     for (int x = 0; x < 160; x++) {
         int ci = 0, attr = 0;
-        if (g->cgb || (g->lcdc & 1)) {  /* DMG: bit 0 off blanks background and window */
+        if (cgb_game(g) || (g->lcdc & 1)) {  /* DMG and compatibility mode: bit 0 off blanks background and window */
             unsigned map, tx, ty;
             if (window && x >= wx) map = g->lcdc & 0x40 ? 0x1C00 : 0x1800, tx = (unsigned)(x - wx), ty = g->win_line;
             else map = g->lcdc & 0x08 ? 0x1C00 : 0x1800, tx = (g->scx + x) & 255u, ty = (g->scy + g->ly) & 255u;
             unsigned at = map + (ty / 8) * 32 + tx / 8;
             uint8_t tile = g->vram[at];
             /* CGB: bank 1 holds each map entry's attributes: palette, tile bank, flips, priority */
-            attr = g->cgb ? g->vram[0x2000 + at] : 0;
+            attr = cgb_game(g) ? g->vram[0x2000 + at] : 0;
             int y = (int)(ty & 7), px = (int)(tx & 7);
             if (attr & 0x40) y = 7 - y;
             if (attr & 0x20) px = 7 - px;
             ci = tile_pixel(g, tile_row(g, tile, y) + (attr & 8 ? 0x2000u : 0), px);
         }
         bg[x] = (uint8_t)ci, bg_attr[x] = (uint8_t)attr;
-        out[x] = g->cgb ? cgb_colour(g->bg_pal, attr & 7, ci) : (uint16_t)(bgp >> (ci * 2) & 3);
+        if (!g->cgb) out[x] = (uint16_t)(bgp >> (ci * 2) & 3);
+        else out[x] = g->compat ? cgb_colour(g->bg_pal, 0, bgp >> (ci * 2) & 3) : cgb_colour(g->bg_pal, attr & 7, ci);
     }
     if (!(g->lcdc & 2)) return;
     /* objects: DMG: the lowest X wins, then the lowest OAM index; CGB: the
@@ -104,7 +108,7 @@ static void draw_line(Gb *g, uint8_t objs[10], int nobj, int window) {
      * first, so better ones overwrite */
     uint8_t order[10];
     memcpy(order, objs, (size_t)nobj);
-    for (int i = 1; i < nobj && !(g->cgb && !g->opri); i++)
+    for (int i = 1; i < nobj && !(cgb_game(g) && !g->opri); i++)
         for (int j = i; j > 0 && g->oam[order[j] * 4 + 1] < g->oam[order[j - 1] * 4 + 1]; j--) {
             uint8_t t = order[j];
             order[j] = order[j - 1], order[j - 1] = t;
@@ -114,7 +118,7 @@ static void draw_line(Gb *g, uint8_t objs[10], int nobj, int window) {
         int y = g->ly - (o[0] - 16), sx = o[1] - 8;
         if (o[3] & 0x40) y = h - 1 - y;  /* Y flip */
         uint8_t tile = h == 16 ? (uint8_t)((o[2] & 0xFE) | (y >= 8)) : o[2];
-        unsigned row = tile * 16u + (unsigned)(y & 7) * 2u + (g->cgb && (o[3] & 8) ? 0x2000u : 0);
+        unsigned row = tile * 16u + (unsigned)(y & 7) * 2u + (cgb_game(g) && (o[3] & 8) ? 0x2000u : 0);
         for (int p = 0; p < 8; p++) {
             int x = sx + p;
             if (x < 0 || x >= 160) continue;
@@ -127,7 +131,8 @@ static void draw_line(Gb *g, uint8_t objs[10], int nobj, int window) {
         const uint8_t *o = g->oam + order[(int)win[x]] * 4;
         if (g->cgb) {
             if ((g->lcdc & 1) && bg[x] && ((o[3] & 0x80) || (bg_attr[x] & 0x80))) continue;
-            out[x] = cgb_colour(g->obj_pal, o[3] & 7, col[x]);
+            out[x] = g->compat ? cgb_colour(g->obj_pal, o[3] >> 4 & 1, g->io[o[3] & 0x10 ? 0x49 : 0x48] >> (col[x] * 2) & 3)
+                               : cgb_colour(g->obj_pal, o[3] & 7, col[x]);
             continue;
         }
         if ((o[3] & 0x80) && bg[x]) continue;  /* behind background colours 1-3 */
@@ -142,7 +147,7 @@ static void mode3_start(Gb *g) {
     uint8_t objs[10];
     int nobj = g->lcdc & 2 ? scan_objects(g, objs) : 0;
     if (g->ly == g->wy) g->wy_hit = 1;
-    int window = (g->lcdc & 0x20) && (g->cgb || (g->lcdc & 1)) && g->wy_hit && g->wx <= 166;
+    int window = (g->lcdc & 0x20) && (cgb_game(g) || (g->lcdc & 1)) && g->wy_hit && g->wx <= 166;
     draw_line(g, objs, nobj, window);
     int len = 172 + (g->scx & 7) + (window ? 6 : 0);
     for (int i = 0; i < nobj; i++) {

@@ -7,12 +7,12 @@ recompiles one (through `-DROMS`, see the [root README](../README.md#recompiling
 ## Status
 - **CPU**: the SM83 interpreter passes SingleStepTests sm83 (every opcode,
   cycle by cycle); recompiled code is the same C per instruction.
-- **System**: 132 blargg and mooneye test ROMs pass (cpu_instrs,
+- **System**: 147 blargg and mooneye test ROMs pass (cpu_instrs,
   instr_timing, mem_timing, halt_bug, dmg_sound, cgb_sound, mooneye's
-  timer, interrupt, serial, DMA and MBC tests, MBC1 multicart); 17 are
-  listed open in `tests/gb/test_roms.py`: 9 check another model's boot
-  state, 8 PPU timing. The Color's speed switch is checked by AGE's
-  spsw-div and gambatte's start_stop ROMs.
+  timer, interrupt, serial, DMA and MBC tests, MBC1 multicart, and its boot
+  register, DIV and I/O tests for DMG0, MGB, SGB, SGB2, CGB and AGB); 8 are
+  listed open in `tests/gb/test_roms.py`, all PPU timing. The Color's speed
+  switch is checked by AGE's spsw-div and gambatte's start_stop ROMs.
 - **Picture**: dmg-acid2 and cgb-acid2 match their reference screenshots
   pixel for pixel.
 - **Games**: in samples of the licensed sets, 41 Game Boy and 36 Game Boy
@@ -29,7 +29,15 @@ recompiles one (through `-DROMS`, see the [root README](../README.md#recompiling
 
 ## Models and cartridges
 A game whose header asks for the Color runs in CGB mode, any other as on
-the original Game Boy (`gb_headless --model dmg|cgb` forces one).
+the original Game Boy (`model = auto`). `model = cgb` runs a game that does
+not ask for the Color in the Color's compatibility mode: the game behaves
+as on a Game Boy, with the palette the Color's boot ROM picks from the
+header (the title's checksum, and its 4th letter where games share one),
+and the boot state of that mode. No Nintendo boot ROM is used; the
+palette table is from SameBoy's boot ROM source ([sources](../docs/sources.md)).
+`gb_headless --model` also takes `cgb0`, `agb`, `dmg0`, `mgb`, `sgb` and
+`sgb2`: those start in the boot state of that model (registers, DIV, I/O);
+nothing else differs, there are no Super Game Boy features.
 Cartridges: ROM only, MBC1 (also the multicart wiring: an 8 Mbit ROM with the logo again at
 $40104), MBC2, MBC3 with its
 clock, MBC5 (rumble ignored). Battery RAM is kept in `ROM.sav` next to the
@@ -47,22 +55,27 @@ reports the first difference.
 
 ## Settings and the headless program
 `palette = green` (the original screen's tint) or `gray`, in `gb.ini` or
-the game's .ini; Color games bring their own colours.
+the game's .ini; Color games bring their own colours. `model = auto`, `dmg`
+or `cgb`, there too (see above).
 
 `gb_headless ROM` options: `--frames N`, `--play` (scripted input),
 `--pgm FILE` (DMG shades) or `--ppm FILE` (colour) for the last frame,
 `--wav FILE` (the sound, stereo), `--state-at F FILE` / `--load-state FILE`,
-`--misses FILE`, `--diff`, `--coverage`, `--model dmg|cgb`. Test ROMs that
+`--misses FILE`, `--diff`, `--coverage`, `--model dmg|cgb|cgb0|agb|dmg0|mgb|sgb|sgb2`. Test ROMs that
 report on the serial port or in cartridge RAM print `result: passed`.
 
 ## Not yet
-- DMG games are not run in the Color's compatibility mode (its colours).
+- Compatibility mode: the palettes chosen by held buttons at power-on
+  (the boot ROM's key combinations) and the logo tilemap some games need
+  are not there.
 - A line is drawn when its mode 3 starts: register writes in the middle of
   a line show on the next one (cgb-acid-hell needs that).
-- Open test ROMs: 8 mooneye PPU timing tests and the boot state of other
-  models. The CGB boot DIV value is unchecked; AGE's other speed switch
-  ROMs (tima, mode0, ch2 length, stop prefetch) still fail: the TIMA, PPU
-  and prefetch details after the switch are not modelled.
+- Open test ROMs: 8 mooneye PPU timing tests. The boot DIV of a Color
+  game is unchecked (the test ROMs that check it are Game Boy games, so
+  only compatibility mode has it); the DMG0's start position in the frame
+  is only known within its test's window; AGE's other speed switch ROMs
+  (tima, mode0, ch2 length, stop prefetch) still fail: the TIMA, PPU and
+  prefetch details after the switch are not modelled.
 
 ## Docs
 | File | Content |

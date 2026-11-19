@@ -18,7 +18,11 @@
 
 enum { GB_FRAME_CYCLES = 17556 };  /* M-cycles per frame: 154 lines x 114 */
 enum { INT_VBLANK = 1, INT_STAT = 2, INT_TIMER = 4, INT_SERIAL = 8, INT_JOYPAD = 16 };
-enum { GB_MODEL_AUTO = -1, GB_MODEL_DMG, GB_MODEL_CGB };  /* AUTO: CGB when the header asks for it ($0143 bit 7) */
+/* The model whose boot ROM state the game starts in. AUTO: CGB when the header asks for it ($0143 bit 7), else DMG.
+ * CGB and AGB with a game that does not ask for the Color: compatibility mode (cgb_compat.c). The SGB models
+ * differ in their boot state only. */
+enum { GB_MODEL_AUTO = -1, GB_MODEL_DMG, GB_MODEL_CGB, GB_MODEL_DMG0, GB_MODEL_MGB, GB_MODEL_SGB, GB_MODEL_SGB2,
+       GB_MODEL_AGB, GB_MODEL_CGB0 };
 
 typedef struct Gb {
     GbCpu cpu;
@@ -54,8 +58,8 @@ typedef struct Gb {
     int dma_pos;
     uint16_t dma_src, dma_next;
     uint64_t frame_end;        /* cpu.cycles where the current frame ends */
-    /* Game Boy Color (cgb: the game runs in CGB mode; DMG games run as on a DMG) */
-    uint8_t cgb, vbk, svbk, opri;       /* VRAM bank, WRAM bank at $D000 (0 = 1), object priority (0: OAM order) */
+    /* Game Boy Color (cgb: the machine is a Color; compat: it runs a DMG game, with the Color's palettes) */
+    uint8_t cgb, compat, vbk, svbk, opri;       /* VRAM bank, WRAM bank at $D000 (0 = 1), object priority (0: OAM order) */
     uint8_t key1, double_speed, half;   /* speed switch armed; double speed; which half of the slow clock this is */
     uint8_t bcps, ocps, bg_pal[64], obj_pal[64];  /* palette RAM: 8 palettes x 4 colours, RGB555 little endian */
     /* HDMA: source, destination (VRAM offset), blocks left - 1 ($7F: none);
@@ -89,6 +93,7 @@ int gb_state_save(const Gb *g, const char *path);
 int gb_state_load(Gb *g, const char *path, char *err, size_t errlen);
 
 /* ppu.c */
+uint8_t gb_compat_palettes(Gb *g);  /* cgb_compat.c: the boot ROM's palette for this game; returns its title checksum */
 void ppu_tick(Gb *g);
 int ppu_mode(const Gb *g);
 void ppu_stat_update(Gb *g);

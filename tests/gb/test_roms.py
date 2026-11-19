@@ -22,19 +22,20 @@ RUNNER = os.path.join(BUILD, "gb_headless" + (".exe" if os.name == "nt" else "")
 SUITES = [
     "blargg/cpu_instrs", "blargg/instr_timing", "blargg/mem_timing", "blargg/mem_timing-2",
     "blargg/halt_bug.gb", "blargg/dmg_sound/rom_singles", "blargg/cgb_sound/rom_singles", "mooneye-test-suite/acceptance", "mooneye-test-suite/emulator-only",
+    # DMG games that check the boot state of a Color (compatibility mode)
+    "mooneye-test-suite/misc/boot_div-A.gb", "mooneye-test-suite/misc/boot_div-cgb0.gb",
+    "mooneye-test-suite/misc/boot_div-cgbABCDE.gb", "mooneye-test-suite/misc/boot_hwio-C.gb",
+    "mooneye-test-suite/misc/boot_regs-A.gb", "mooneye-test-suite/misc/boot_regs-cgb.gb",
 ]
-OTHER_MODEL = "boot state of another model (we are a DMG ABC)"
+# ROMs that check the boot state of a model: run as that model (gb_headless --model); the rest as the header asks
+MODELS = {
+    "boot_div-S": "sgb", "boot_div2-S": "sgb2", "boot_hwio-S": "sgb", "boot_regs-sgb": "sgb", "boot_regs-sgb2": "sgb2",
+    "boot_div-dmg0": "dmg0", "boot_hwio-dmg0": "dmg0", "boot_regs-dmg0": "dmg0", "boot_regs-mgb": "mgb",
+    "boot_div-A": "agb", "boot_regs-A": "agb", "boot_div-cgb0": "cgb0", "boot_div-cgbABCDE": "cgb",
+    "boot_hwio-C": "cgb", "boot_regs-cgb": "cgb",
+}
 PPU = "PPU timing (G3)"
 OPEN = {
-    "mooneye-test-suite/acceptance/boot_div-S.gb": OTHER_MODEL,
-    "mooneye-test-suite/acceptance/boot_div-dmg0.gb": OTHER_MODEL,
-    "mooneye-test-suite/acceptance/boot_div2-S.gb": OTHER_MODEL,
-    "mooneye-test-suite/acceptance/boot_hwio-S.gb": OTHER_MODEL,
-    "mooneye-test-suite/acceptance/boot_hwio-dmg0.gb": OTHER_MODEL,
-    "mooneye-test-suite/acceptance/boot_regs-dmg0.gb": OTHER_MODEL,
-    "mooneye-test-suite/acceptance/boot_regs-mgb.gb": OTHER_MODEL,
-    "mooneye-test-suite/acceptance/boot_regs-sgb.gb": OTHER_MODEL,
-    "mooneye-test-suite/acceptance/boot_regs-sgb2.gb": OTHER_MODEL,
     "mooneye-test-suite/acceptance/ppu/intr_2_mode0_timing.gb": PPU,
     "mooneye-test-suite/acceptance/ppu/intr_2_mode0_timing_sprites.gb": PPU,
     "mooneye-test-suite/acceptance/ppu/intr_2_mode3_timing.gb": PPU,
@@ -66,7 +67,8 @@ class TestGbRoms(unittest.TestCase):
         self.assertGreater(len(found), 100)
         for rom in found:
             with self.subTest(rom=rom):
-                r = subprocess.run([RUNNER, os.path.join(base, rom), "--frames", "4000"],
+                model = MODELS.get(os.path.basename(rom)[:-3])
+                r = subprocess.run([RUNNER, os.path.join(base, rom), "--frames", "4000"] + (["--model", model] if model else []),
                                    capture_output=True, text=True, timeout=300)
                 last = r.stdout.strip().splitlines()[-1] if r.stdout.strip() else r.stderr
                 if rom in OPEN:

@@ -79,7 +79,8 @@ Supported mappers and more: nes/README.md on the project page.
 GAME BOY AND GAME BOY COLOR
 
 Color games run as on a Game Boy Color, the others as on the original
-Game Boy (palette = green or gray in gb.ini). Battery saves are kept in
+Game Boy (palette = green or gray in gb.ini; model = cgb runs those in the
+Color's compatibility mode, with its colours). Battery saves are kept in
 game.gb.sav next to the game, with the cartridge clock where there is one.
 More: gb/README.md on the project page.
 

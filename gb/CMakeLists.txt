@@ -22,7 +22,7 @@ add_executable(gb_cpu_tests tests/cpu_tests.c)
 target_link_libraries(gb_cpu_tests PRIVATE gbcpu)
 
 # The Game Boy system (bus, timer, interrupts, PPU, sound, cartridges).
-add_library(gbcore STATIC runtime/gb.c runtime/ppu.c runtime/apu.c runtime/cart.c)
+add_library(gbcore STATIC runtime/gb.c runtime/ppu.c runtime/apu.c runtime/cart.c runtime/cgb_compat.c)
 target_link_libraries(gbcore PUBLIC gbcpu core)
 # Programs without recompiled code link this (gb_recomp_program = NULL).
 add_library(gb_recomp_none STATIC runtime/recomp_none.c)

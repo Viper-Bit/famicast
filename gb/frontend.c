@@ -19,11 +19,20 @@ const char SYS_ID[] = "gb";
 
 const char SYS_SETTINGS[] =
     "# palette: the four shades: green = the original screen's tint, gray = neutral grays\n"
-    "palette = green\n";
+    "palette = green\n"
+    "# model: dmg, cgb (a Game Boy game then runs in the Color's compatibility mode, with its colours) or auto\n"
+    "# (the game's header decides)\n"
+    "model = auto\n";
 
-static int gray;
+static int gray, model = GB_MODEL_AUTO;
 
 int sys_setting(const char *key, const char *val) {
+    if (!strcmp(key, "model")) {
+        if (!strcmp(val, "auto")) return model = GB_MODEL_AUTO, 1;
+        if (!strcmp(val, "dmg")) return model = GB_MODEL_DMG, 1;
+        if (!strcmp(val, "cgb")) return model = GB_MODEL_CGB, 1;
+        return 0;
+    }
     if (strcmp(key, "palette")) return 0;
     if (!strcmp(val, "green")) return gray = 0, 1;
     if (!strcmp(val, "gray")) return gray = 1, 1;
@@ -88,11 +97,11 @@ int sys_open(const char *path, const Settings *settings, SysInfo *info, char *er
         SDL_strlcpy(sav_path, path, sizeof sav_path);
     }
     char msg[128];
-    if (gb_load(&gb, rom, rom_size, msg, sizeof msg) != 0) return SDL_snprintf(err, errlen, "%s: %s", path, msg), 1;
+    if (gb_load_model(&gb, rom, rom_size, model, msg, sizeof msg) != 0) return SDL_snprintf(err, errlen, "%s: %s", path, msg), 1;
     SDL_snprintf(info->state_path, sizeof info->state_path, "%s.state", sav_path);
     SDL_strlcat(sav_path, ".sav", sizeof sav_path);
     if (gb.cart.battery) load_sav();
-    const char *name = path;  /* the settings' palette is for DMG games; CGB games bring their own colours */
+    const char *name = path;  /* the settings' palette is for DMG games on a DMG; CGB games bring their own colours */
     for (const char *p = path; *p; p++)
         if (*p == '/' || *p == '\\') name = p + 1;
     SDL_strlcpy(info->name, name, sizeof info->name);
@@ -112,7 +121,7 @@ void sys_reset(void) {
     keep = gb.cart;
     gb_free(&gb);
     char err[128];
-    if (gb_load(&gb, rom, rom_size, err, sizeof err) != 0) return;
+    if (gb_load_model(&gb, rom, rom_size, model, err, sizeof err) != 0) return;
     memcpy(gb.cart.ram, keep.ram, sizeof keep.ram);
     memcpy(gb.cart.rtc, keep.rtc, sizeof keep.rtc);
 }

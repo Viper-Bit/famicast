@@ -70,6 +70,7 @@ detail yet.
 | [Mesen2](https://github.com/SourMesen/Mesen2) (the program) | Second opinion when a game looks wrong (its Lua scripting, state for state against ours) and the speed comparison in 06 | GPL-3.0 | used |
 | Mesen2 `Core/NES/Mappers/FDS` (Fds.cpp, FdsAudio.cpp, ModChannel.h, BaseFdsChannel.h) and `Core/NES/Loaders/FdsLoader.cpp` | The drive model followed in `nes/runtime/fds.c` (gaps and fake CRCs, 50000-cycle spin-up, a byte every 149 cycles, gap detection, $4030-$4032 bits), the automatic disk swap ($4032 polls, $E445 header match), the FDS sound details in `nes/runtime/apu.c` | GPL-3.0 (same as this program) | read |
 | FCEUX | Second reference | GPL (check version) | listed |
+| [SameBoy](https://github.com/LIJI32/SameBoy) `BootROMs/cgb_boot.asm` (the title checksum list, the 4th-letter list, the palette per checksum, the palette combinations and the 30 palettes; not its extra palettes or key combinations) | `gb/runtime/cgb_compat.c`: the colours of a Game Boy game on a Game Boy Color (compatibility mode). The tables are copied, the lookup follows the boot ROM's routine. No Nintendo boot ROM is used | Expat (MIT), (c) 2015-2026 Lior Halphon; checked in the repository's LICENSE: all files but the iOS and HexFiend directories | read |
 
 ## Libraries
 | Library | Used for | License |

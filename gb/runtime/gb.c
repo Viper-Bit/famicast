@@ -113,7 +113,7 @@ static uint8_t io_read(Gb *g, uint16_t a) {
     if (a >= 0xFF10 && a < 0xFF40) return apu_read(g, a);
     if (!g->cgb) return 0xFF;
     switch (a) {  /* CGB */
-    case 0xFF4D: return (uint8_t)(0x7E | g->double_speed << 7 | g->key1);
+    case 0xFF4D: return g->compat ? 0xFF : (uint8_t)(0x7E | g->double_speed << 7 | g->key1);
     case 0xFF4F: return 0xFE | g->vbk;
     case 0xFF55: return (uint8_t)((g->hdma_on ? 0 : 0x80) | g->hdma_left);
     case 0xFF68: return g->bcps | 0x40;
@@ -121,7 +121,9 @@ static uint8_t io_read(Gb *g, uint16_t a) {
     case 0xFF6A: return g->ocps | 0x40;
     case 0xFF6B: return g->obj_pal[g->ocps & 0x3F];
     case 0xFF6C: return 0xFE | g->opri;
-    case 0xFF70: return 0xF8 | g->svbk;
+    case 0xFF70: return g->compat ? 0xFF : 0xF8 | g->svbk;
+    case 0xFF72: case 0xFF73: case 0xFF76: case 0xFF77: return 0x00;  /* undocumented; FF76/7 read the sound's output */
+    case 0xFF75: return 0x8F;
     }
     return 0xFF;
 }
@@ -345,16 +347,35 @@ int gb_load_model(Gb *g, const uint8_t *rom, size_t size, int model, char *err, 
     if (gb_cart_load(&g->cart, rom, size, err, errlen) != 0) return -1;
     GbCpu *c = &g->cpu;
     c->bus = g;
-    g->cgb = (uint8_t)(model == GB_MODEL_CGB || (model == GB_MODEL_AUTO && (g->cart.rom[0x143] & 0x80)));
-    /* what the boot ROM leaves (Pan Docs "Power Up Sequence"). DMG: F = $B0
-     * with a correct header checksum, else H and C too */
-    if (g->cgb) c->a = 0x11, c->f = 0x80, c->b = 0x00, c->c = 0x00, c->d = 0xFF, c->e = 0x56, c->h = 0x00, c->l = 0x0D;
-    else c->a = 0x01, c->f = 0xB0, c->b = 0x00, c->c = 0x13, c->d = 0x00, c->e = 0xD8, c->h = 0x01, c->l = 0x4D;
+    int color = model == GB_MODEL_CGB || model == GB_MODEL_CGB0 || model == GB_MODEL_AGB;
+    g->cgb = (uint8_t)(color || (model == GB_MODEL_AUTO && (g->cart.rom[0x143] & 0x80)));
+    g->compat = (uint8_t)(color && !(g->cart.rom[0x143] & 0x80));
+    /* what the boot ROM of the model leaves (Pan Docs "Power Up Sequence"): the registers A F B C D E H L, and the
+     * DIV counter (mooneye boot_div and boot_regs tests). DMG: F = $B0 with a correct header checksum, else H and C too.
+     * div_compat: the counter when the Color boots a DMG game (mooneye's boot_div-A, -cgb0, -cgbABCDE are DMG games). A
+     * Color game's DIV is unchecked (no test ROM is a Color game), so it stays what it was. */
+    static const struct { uint8_t r[8]; uint16_t div, div_compat; } BOOT[] = {
+        [GB_MODEL_DMG]  = {{0x01, 0xB0, 0x00, 0x13, 0x00, 0xD8, 0x01, 0x4D}, 0xABC8, 0},
+        [GB_MODEL_MGB]  = {{0xFF, 0xB0, 0x00, 0x13, 0x00, 0xD8, 0x01, 0x4D}, 0xABC8, 0},
+        [GB_MODEL_DMG0] = {{0x01, 0x00, 0xFF, 0x13, 0x00, 0xC1, 0x84, 0x03}, 0x182C, 0},
+        [GB_MODEL_SGB]  = {{0x01, 0x00, 0x00, 0x14, 0x00, 0x00, 0xC0, 0x60}, 0xD85C, 0},
+        [GB_MODEL_SGB2] = {{0xFF, 0x00, 0x00, 0x14, 0x00, 0x00, 0xC0, 0x60}, 0xD84C, 0},
+        [GB_MODEL_CGB]  = {{0x11, 0x80, 0x00, 0x00, 0xFF, 0x56, 0x00, 0x0D}, 0x1EA0, 0x2674},
+        [GB_MODEL_CGB0] = {{0x11, 0x80, 0x00, 0x00, 0xFF, 0x56, 0x00, 0x0D}, 0x1EA0, 0x2880},
+        [GB_MODEL_AGB]  = {{0x11, 0x00, 0x01, 0x00, 0xFF, 0x56, 0x00, 0x0D}, 0x1EA0, 0x2678},
+    };
+    int m = model == GB_MODEL_AUTO ? (g->cgb ? GB_MODEL_CGB : GB_MODEL_DMG) : model;
+    c->a = BOOT[m].r[0], c->f = BOOT[m].r[1], c->b = BOOT[m].r[2], c->c = BOOT[m].r[3];
+    c->d = BOOT[m].r[4], c->e = BOOT[m].r[5], c->h = BOOT[m].r[6], c->l = BOOT[m].r[7];
     c->sp = 0xFFFE, c->pc = 0x0100;
-    /* DIV: DMG from mooneye boot_div-dmgABCmgb (the only value that passes).
-     * shortcut: CGB unchecked (mooneye's CGB boot tests are DMG games on a CGB), until a game minds */
-    g->div = g->cgb ? 0x1EA0 : 0xABC8;
+    g->div = g->compat ? BOOT[m].div_compat : BOOT[m].div;
     if (g->cgb) memset(g->bg_pal, 0xFF, sizeof g->bg_pal);  /* the boot ROM leaves the background white */
+    if (g->compat) {  /* the boot ROM picked the palettes; B = title checksum (AGB: + 1), DE = $0008, HL = $007C */
+        memset(g->obj_pal, 0xFF, sizeof g->obj_pal);
+        uint8_t sum = gb_compat_palettes(g);
+        c->b = (uint8_t)(sum + (m == GB_MODEL_AGB)), c->d = 0x00, c->e = 0x08, c->h = 0x00, c->l = 0x7C;
+        g->opri = 1, g->p1 = 0x30, g->bcps = 0x88, g->ocps = 0x90;  /* the boot ROM wrote 8 and 16 palette bytes */
+    }
     g->hdma_left = 0x7F;
     g->tac = 0x00;
     g->ifl = INT_VBLANK;
@@ -364,6 +385,9 @@ int gb_load_model(Gb *g, const uint8_t *rom, size_t size, int model, char *err, 
     apu_boot(g);
     g->recomp_on = gb_recomp_program && gb_recomp_program->rom_hash == gb_rom_hash(g);
     g->io[0x47] = 0xFC, g->io[0x48] = 0xFF, g->io[0x49] = 0xFF;
+    /* DMG0 starts in vblank (LY $91); mooneye boot_hwio-dmg0 passes for dots 84-252 of that line, 168 is a pick */
+    if (m == GB_MODEL_DMG0) g->ly = 145, g->dot = 168, g->mode = 1;
+    if (m == GB_MODEL_SGB || m == GB_MODEL_SGB2) g->p1 = 0x30, g->apu.on[0] = 0;  /* the SGB's boot ends on a joypad write, with no boot sound */
     return 0;
 }
 
